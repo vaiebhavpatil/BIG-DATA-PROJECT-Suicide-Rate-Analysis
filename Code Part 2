@@ -1,0 +1,154 @@
+!apt-get install openjdk-8-jdk-headless -qq > /dev/null
+!wget https://dlcdn.apache.org/spark/spark-3.3.2/spark-3.3.2-bin-hadoop3.tgz
+
+!tar xf spark-3.3.2-bin-hadoop3.tgz
+
+import os
+os.environ["JAVA_HOME"] = "/usr/lib/jvm/java-8-openjdk-amd64"
+os.environ["SPARK_HOME"] = '/content/spark-3.3.2-bin-hadoop3'
+
+!pip install -q findspark
+# Import the libary
+import findspark
+# Initiate findspark
+findspark.init()
+# Check the location for Spark
+findspark.find()
+
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.master("local[*]").getOrCreate()
+spark
+
+import gdown
+!gdown --fuzzy https://drive.google.com/file/d/1v4OD0yJXQABjA9ZTfllpE9u4dPq0BOzf/view?usp=sharing
+
+suicide_df= spark.read.option("header","true").csv("master.csv")
+suicide_df.printSchema()
+
+suicide_df.select("suicides_no", "population", "gdp_per_capita ($)").describe().show()
+
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, avg, sum
+import matplotlib.pyplot as plt
+
+spark = SparkSession.builder.appName("SuicideAnalysis").getOrCreate()
+
+avg_suicide_rate = suicide_df.groupBy("country", "year").agg(avg(col("suicides_no")/col("population")).alias("avg_suicide_rate"))
+total_suicides = suicide_df.groupBy("country", "year").agg(sum(col("suicides_no")).alias("total_suicides"))
+suicide_analysis = avg_suicide_rate.join(total_suicides, ["country", "year"])
+highest_suicide_rates = suicide_analysis.groupBy("country").agg(avg(col("avg_suicide_rate")).alias("avg_suicide_rate")).orderBy(col("avg_suicide_rate").desc()).limit(10)
+lowest_suicide_rates = suicide_analysis.groupBy("country").agg(avg(col("avg_suicide_rate")).alias("avg_suicide_rate")).orderBy(col("avg_suicide_rate").asc()).limit(10)
+highest_suicide_rates_pd = highest_suicide_rates.toPandas()
+lowest_suicide_rates_pd = lowest_suicide_rates.toPandas()
+fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(10, 5))
+ax[0].barh(highest_suicide_rates_pd["country"], highest_suicide_rates_pd["avg_suicide_rate"])
+ax[0].set_title("Countries with the highest suicide rates")
+ax[1].barh(lowest_suicide_rates_pd["country"], lowest_suicide_rates_pd["avg_suicide_rate"])
+ax[1].set_title("Countries with the lowest suicide rates")
+plt.tight_layout()
+plt.show()
+
+suicide_by_age_sex = suicide_df.groupBy("age", "sex").agg(sum("suicides_no").alias("total_suicides")).orderBy(col("total_suicides").desc())
+suicide_by_age_sex_pd = suicide_by_age_sex.toPandas()
+suicide_by_age_sex = suicide_df.groupBy("age", "sex").agg(sum("suicides_no").alias("total_suicides")).orderBy(col("total_suicides").desc())
+suicide_by_age_sex_pd = suicide_by_age_sex.toPandas()
+plt.figure(figsize=(10, 6))
+plt.plot(suicide_by_age_sex_pd[suicide_by_age_sex_pd["sex"]=="male"]["age"], suicide_by_age_sex_pd[suicide_by_age_sex_pd["sex"]=="male"]["total_suicides"], label="Male")
+plt.plot(suicide_by_age_sex_pd[suicide_by_age_sex_pd["sex"]=="female"]["age"], suicide_by_age_sex_pd[suicide_by_age_sex_pd["sex"]=="female"]["total_suicides"], label="Female")
+plt.title("Suicide rates by age group and sex")
+plt.xlabel("Age group and sex")
+plt.ylabel("Total suicides")
+plt.legend()
+plt.show()
+
+suicide_by_age_sex = suicide_df.groupBy("age", "sex").agg(sum("suicides_no").alias("total_suicides")).orderBy(col("total_suicides").desc())
+suicide_by_age_sex_pd = suicide_by_age_sex.toPandas()
+plt.figure(figsize=(8, 6))
+plt.barh(suicide_by_age_sex_pd["age"] + " " + suicide_by_age_sex_pd["sex"], suicide_by_age_sex_pd["total_suicides"])
+plt.title("Suicide rates by age group and sex")
+plt.xlabel("Total suicides")
+plt.show()
+
+highest_suicide_rates = suicide_analysis.groupBy("country").agg(avg(col("avg_suicide_rate")).alias("avg_suicide_rate")).orderBy(col("avg_suicide_rate").desc()).limit(10)
+lowest_suicide_rates = suicide_analysis.groupBy("country").agg(avg(col("avg_suicide_rate")).alias("avg_suicide_rate")).orderBy(col("avg_suicide_rate").asc()).limit(10)
+
+highest_suicide_rates_pd = highest_suicide_rates.toPandas()
+lowest_suicide_rates_pd = lowest_suicide_rates.toPandas()
+fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(10, 5))
+ax[0].barh(highest_suicide_rates_pd["country"], highest_suicide_rates_pd["avg_suicide_rate"])
+ax[0].set_title("Countries with the highest suicide rates")
+ax[1].barh(lowest_suicide_rates_pd["country"], lowest_suicide_rates_pd["avg_suicide_rate"])
+ax[1].set_title("Countries with the lowest suicide rates")
+plt.tight_layout()
+plt.show()
+
+suicides_over_time = suicide_df.groupBy("year").agg(sum(col("suicides_no")).alias("total_suicides"))
+suicides_over_time_pd = suicides_over_time.toPandas()
+plt.figure(figsize=(10, 6))
+plt.plot(suicides_over_time_pd["year"], suicides_over_time_pd["total_suicides"])
+plt.title("Total number of suicides over time")
+plt.xlabel("Year")
+plt.ylabel("Total suicides")
+plt.show()
+
+#Prediction Model
+
+from pyspark.sql import SparkSession
+from pyspark.ml.evaluation import BinaryClassificationEvaluator
+from pyspark.ml.feature import VectorAssembler
+from pyspark.ml.classification import LogisticRegression
+
+spark = SparkSession.builder.appName("Regression").getOrCreate()
+suicide_df.describe().show()
+
+suicide_final=suicide_df.select(['country','year','sex','age','suicides_no','population','generation','gdp_per_capita ($)','suicides/100k pop'])
+suicide_final.describe().show()
+
+from pyspark.sql.types import IntegerType
+suicide_final = suicide_final.withColumn("year", suicide_final["year"].cast(IntegerType()))
+suicide_final= suicide_final.withColumn("suicides_no", suicide_final["suicides_no"].cast(IntegerType()))
+suicide_final= suicide_final.withColumn("gdp_per_capita ($)", suicide_final["gdp_per_capita ($)"].cast(IntegerType()))
+suicide_final= suicide_final.withColumn("suicides/100k pop", suicide_final["suicides/100k pop"].cast(IntegerType()))
+suicide_final= suicide_final.withColumn("population", suicide_final["population"].cast(IntegerType()))
+
+from pyspark.ml.feature import (VectorAssembler,VectorIndexer,OneHotEncoder,StringIndexer)
+gender_indexer = StringIndexer(inputCol='sex',outputCol='sexIndex')
+gender_encoder = OneHotEncoder(inputCol='sexIndex',outputCol='sexVec')
+age_indexer = StringIndexer(inputCol='age',outputCol='ageIndex')
+age_encoder = OneHotEncoder(inputCol='ageIndex',outputCol='ageVec')
+country_indexer = StringIndexer(inputCol='country',outputCol='countryIndex')
+country_encoder = OneHotEncoder(inputCol='countryIndex',outputCol='countryVec')
+generation_indexer = StringIndexer(inputCol='generation',outputCol='generationIndex')
+generation_encoder = OneHotEncoder(inputCol='generationIndex',outputCol='generationVec')
+assembler = VectorAssembler(inputCols=['countryVec','year','sexVec','ageVec','suicides_no','population','generationVec','gdp_per_capita ($)','suicides/100k pop'],outputCol='features')
+
+suicide_final.printSchema()
+
+from pyspark.ml import Pipeline
+from pyspark.ml.classification import LogisticRegression
+log_reg = LogisticRegression(featuresCol='features',labelCol='generationIndex')
+pipe = Pipeline(stages=[gender_indexer,age_indexer,country_indexer,generation_indexer,gender_encoder,age_encoder,country_encoder,generation_encoder,assembler,log_reg])
+
+train_data, test_data = suicide_final.randomSplit([0.7, .3])
+
+# Fitting the model on training data
+fit_model = pipe.fit(train_data)
+
+# Storing the results on test data
+results = fit_model.transform(test_data)
+
+# Showing the results
+results.show()
+
+# Importing the evaluator
+from pyspark.ml.evaluation import BinaryClassificationEvaluator
+
+# Calling the evaluator
+res = BinaryClassificationEvaluator(rawPredictionCol='prediction',labelCol='generationIndex')
+
+# Evaluating the AUC on results
+ROC_AUC = res.evaluate(results)
+
+ROC_AUC
+
+#The End
