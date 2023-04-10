@@ -1,0 +1,158 @@
+!apt-get install openjdk-8-jdk-headless -qq > /dev/null
+!wget https://dlcdn.apache.org/spark/spark-3.3.2/spark-3.3.2-bin-hadoop3.tgz
+!tar xf spark-3.3.2-bin-hadoop3.tgz
+
+import os
+os.environ["JAVA_HOME"] = "/usr/lib/jvm/java-8-openjdk-amd64"
+os.environ["SPARK_HOME"] = '/content/spark-3.3.2-bin-hadoop3'
+
+# Install library for finding Spark
+!pip install -q findspark
+
+# Import the libary
+import findspark
+# Initiate findspark
+findspark.init()
+# Check the location for Spark
+findspark.find()
+
+# Import SparkSession
+from pyspark.sql import SparkSession
+
+# Create a Spark Session
+spark = SparkSession.builder.master("local[*]").getOrCreate()# Check Spark Session Information
+
+# Import a Spark function from library
+from pyspark.sql.functions import col
+
+import gdown
+!gdown --fuzzy https://drive.google.com/file/d/1v4OD0yJXQABjA9ZTfllpE9u4dPq0BOzf/view?usp=sharing
+
+# Print the schema of the DataFrame
+suicide_df.printSchema()
+
+# Convert columns to their appropriate data types
+suicide_df = suicide_df.withColumn("year", col("year").cast("integer"))
+suicide_df = suicide_df.withColumn("suicides_no", col("suicides_no").cast("integer"))
+suicide_df = suicide_df.withColumn("population", col("population").cast("integer"))
+suicide_df = suicide_df.withColumn("gdp_per_capita ($)", col("gdp_per_capita ($)").cast("integer"))
+
+# Show basic statistics of the numerical columns
+suicide_df.select("suicides_no", "population", "gdp_per_capita ($)").describe().show()
+
+# Import necessary libraries
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, avg, sum
+import matplotlib.pyplot as plt
+
+# Create a SparkSession
+spark = SparkSession.builder.appName("SuicideAnalysis").getOrCreate()
+
+# Load the dataset into a DataFrame
+suicide_df = spark.read.format("csv").option("header", "true").load("master.csv")
+
+# Print the schema of the DataFrame
+suicide_df.printSchema()
+
+# Filter out unnecessary columns
+suicide_df = suicide_df.select("year", "age", "sex", "country", "suicides_no", "population", "gdp_per_capita ($)")
+
+# Convert columns to their appropriate data types
+suicide_df = suicide_df.withColumn("year", col("year").cast("integer"))
+suicide_df = suicide_df.withColumn("suicides_no", col("suicides_no").cast("integer"))
+suicide_df = suicide_df.withColumn("population", col("population").cast("integer"))
+suicide_df = suicide_df.withColumn("gdp_per_capita ($)", col("gdp_per_capita ($)").cast("integer"))
+
+# Calculate the average suicide rate by country and year
+avg_suicide_rate = suicide_df.groupBy("country", "year").agg(avg(col("suicides_no")/col("population")).alias("avg_suicide_rate"))
+
+# Calculate the total number of suicides by country and year
+total_suicides = suicide_df.groupBy("country", "year").agg(sum(col("suicides_no")).alias("total_suicides"))
+
+# Join the two DataFrames
+suicide_analysis = avg_suicide_rate.join(total_suicides, ["country", "year"])
+
+# Calculate the countries with the highest and lowest suicide rates
+highest_suicide_rates = suicide_analysis.groupBy("country").agg(avg(col("avg_suicide_rate")).alias("avg_suicide_rate")).orderBy(col("avg_suicide_rate").desc()).limit(10)
+lowest_suicide_rates = suicide_analysis.groupBy("country").agg(avg(col("avg_suicide_rate")).alias("avg_suicide_rate")).orderBy(col("avg_suicide_rate").asc()).limit(10)
+
+# Convert the DataFrames to Pandas for visualization
+highest_suicide_rates_pd = highest_suicide_rates.toPandas()
+lowest_suicide_rates_pd = lowest_suicide_rates.toPandas()
+
+# Visualize the countries with the highest and lowest suicide rates
+fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(10, 5))
+ax[0].barh(highest_suicide_rates_pd["country"], highest_suicide_rates_pd["avg_suicide_rate"])
+ax[0].set_title("Countries with the highest suicide rates")
+ax[1].barh(lowest_suicide_rates_pd["country"], lowest_suicide_rates_pd["avg_suicide_rate"])
+ax[1].set_title("Countries with the lowest suicide rates")
+plt.tight_layout()
+plt.show()
+
+# Calculate the suicide rates by age group and sex
+suicide_by_age_sex = suicide_df.groupBy("age", "sex").agg(sum("suicides_no").alias("total_suicides")).orderBy(col("total_suicides").desc())
+
+# Convert the DataFrame to Pandas for visualization
+suicide_by_age_sex_pd = suicide_by_age_sex.toPandas()
+
+# Calculate the suicide rates by age group and sex
+suicide_by_age_sex = suicide_df.groupBy("age", "sex").agg(sum("suicides_no").alias("total_suicides")).orderBy(col("total_suicides").desc())
+
+# Convert the DataFrame to Pandas for visualization
+suicide_by_age_sex_pd = suicide_by_age_sex.toPandas()
+
+# Visualize the suicide rates by age group and sex
+plt.figure(figsize=(10, 6))
+plt.plot(suicide_by_age_sex_pd[suicide_by_age_sex_pd["sex"]=="male"]["age"], suicide_by_age_sex_pd[suicide_by_age_sex_pd["sex"]=="male"]["total_suicides"], label="Male")
+plt.plot(suicide_by_age_sex_pd[suicide_by_age_sex_pd["sex"]=="female"]["age"], suicide_by_age_sex_pd[suicide_by_age_sex_pd["sex"]=="female"]["total_suicides"], label="Female")
+plt.title("Suicide rates by age group and sex")
+plt.xlabel("Age group and sex")
+plt.ylabel("Total suicides")
+plt.legend()
+plt.show()
+
+
+#Calculate the suicide rates by age group and sex
+suicide_by_age_sex = suicide_df.groupBy("age", "sex").agg(sum("suicides_no").alias("total_suicides")).orderBy(col("total_suicides").desc())
+
+#Convert the DataFrame to Pandas for visualization
+suicide_by_age_sex_pd = suicide_by_age_sex.toPandas()
+
+#Visualize the suicide rates by age group and sex
+plt.figure(figsize=(8, 6))
+plt.barh(suicide_by_age_sex_pd["age"] + " " + suicide_by_age_sex_pd["sex"], suicide_by_age_sex_pd["total_suicides"])
+plt.title("Suicide rates by age group and sex")
+plt.xlabel("Total suicides")
+plt.show()
+
+#Calculate the countries with the highest and lowest suicide rates
+highest_suicide_rates = suicide_analysis.groupBy("country").agg(avg(col("avg_suicide_rate")).alias("avg_suicide_rate")).orderBy(col("avg_suicide_rate").desc()).limit(10)
+lowest_suicide_rates = suicide_analysis.groupBy("country").agg(avg(col("avg_suicide_rate")).alias("avg_suicide_rate")).orderBy(col("avg_suicide_rate").asc()).limit(10)
+
+#Convert the DataFrames to Pandas for visualization
+highest_suicide_rates_pd = highest_suicide_rates.toPandas()
+lowest_suicide_rates_pd = lowest_suicide_rates.toPandas()
+
+#Visualize the countries with the highest and lowest suicide rates
+fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(10, 5))
+ax[0].barh(highest_suicide_rates_pd["country"], highest_suicide_rates_pd["avg_suicide_rate"])
+ax[0].set_title("Countries with the highest suicide rates")
+ax[1].barh(lowest_suicide_rates_pd["country"], lowest_suicide_rates_pd["avg_suicide_rate"])
+ax[1].set_title("Countries with the lowest suicide rates")
+plt.tight_layout()
+plt.show()
+
+#Calculate the total number of suicides over time
+suicides_over_time = suicide_df.groupBy("year").agg(sum(col("suicides_no")).alias("total_suicides"))
+
+#Convert the DataFrame to Pandas for visualization
+suicides_over_time_pd = suicides_over_time.toPandas()
+
+#Visualize the total number of suicides over time
+plt.figure(figsize=(10, 6))
+plt.plot(suicides_over_time_pd["year"], suicides_over_time_pd["total_suicides"])
+plt.title("Total number of suicides over time")
+plt.xlabel("Year")
+plt.ylabel("Total suicides")
+plt.show()
+
